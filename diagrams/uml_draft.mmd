@@ -1,4 +1,5 @@
-classDiagram    %% PawPal+ system design.
+classDiagram
+    %% PawPal+ system design.
     %% Relationships are composition/association ("has-a"), not inheritance.
 
     class Owner {
@@ -56,4 +57,4 @@ classDiagram    %% PawPal+ system design.
     Owner "1" --> "1" Schedule : uses
     Schedule ..> Task : arranges
     Schedule ..> Owner : reads availability
- relationship
+

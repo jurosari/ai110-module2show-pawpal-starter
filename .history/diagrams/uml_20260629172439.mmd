@@ -1,0 +1,51 @@
+classDiagram
+    %% PawPal+ core classes: Owner, Pet, Task, Schedule
+
+    class Owner {
+        +String id
+        +String name
+        +Map availability  "days -> timeslots"
+        +List~Pet~ pets
+        +setAvailability(days, times)
+        +addPet(pet)
+        +removePet(petId)
+        +getDailyPlan(date)
+    }
+
+    class Pet {
+        +String id
+        +String name
+        +String species
+        +int age
+        +List~Task~ tasks
+        +addTask(task)
+        +removeTask(taskId)
+        +getPendingTasks()
+    }
+
+    class Task {
+        +String id
+        +String type  "walk|feed|med|groom|enrich"
+        +DateTime scheduledTime
+        +bool completed
+        +int priority
+        +durationMinutes
+        +schedule(time)
+        +reschedule(newTime)
+        +markCompleted()
+    }
+
+    class Schedule {
+        +Map~Date, List~Task~ slots
+        +List~String~ daysOfWeek
+        +List~String~ timeslots
+        +addTask(task, time)
+        +removeTask(taskId)
+        +editTask(taskId, newTime)
+        +generateDailyPlan(owner, date)
+    }
+
+    Owner "1" o-- "*" Pet : owns
+    Pet "1" o-- "*" Task : has
+    Owner "1" o-- "1" Schedule : uses
+    Schedule "1" *-- "*" Task : schedules
