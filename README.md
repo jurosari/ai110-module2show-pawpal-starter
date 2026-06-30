@@ -44,14 +44,19 @@ pip install -r requirements.txt
 
 ## 🖥️ Sample Output
 
-Paste a sample of your app's CLI or Streamlit output here so a reader can see what a generated plan looks like:
+Terminal output from running the logic-layer testing ground (`python main.py`).
+It builds an owner with two pets and four tasks, then prints the generated
+daily plan (tasks ordered by priority, highest first):
 
 ```
-# e.g.:
-# Daily plan for Biscuit (Golden Retriever):
-#   08:00 — Morning walk (30 min) [priority: high]
-#   09:00 — Feeding (10 min) [priority: high]
-#   ...
+=== Today's Schedule for Alex ===
+
+  12:00  Medication for Luna (5 min) [priority: 9]
+  08:00  Morning walk for Rex (30 min) [priority: 5]
+  18:00  Feeding for Rex (10 min) [priority: 4]
+  18:00  Play / enrichment for Luna (15 min) [priority: 2]
+
+4 task(s) planned across 2 pets.
 ```
 
 ## 🧪 Testing PawPal+
