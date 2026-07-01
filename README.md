@@ -84,31 +84,69 @@ time sorting, filtering by status/pet, conflict detection, and recurrence.
 
 ## 🧪 Testing PawPal+
 
-```bash
-# Run the full test suite:
-pytest
+Run the full test suite from the project root:
 
-# Run with coverage:
-pytest --cov
+```bash
+python -m pytest
 ```
 
-Sample test output:
+### What the tests cover
+
+The suite lives in [`tests/test_pawpal.py`](tests/test_pawpal.py) and has **11 tests**
+across the core scheduling behaviors, mixing happy paths with edge cases:
+
+- **Basics** — completing a task flips its status; adding a task grows the pet's list.
+- **Sorting** — tasks are returned in chronological `"HH:MM"` order, and untimed
+  tasks (`""`) sort to the *end*, not the front.
+- **Recurrence** — completing a `daily` task queues a fresh copy due +1 day; a
+  `weekly` task advances +7 days (rolling across month boundaries); a one-off
+  task creates no follow-up.
+- **Conflict detection** — two tasks in the same time slot produce exactly one
+  warning; a clean schedule returns an empty list; untimed tasks are ignored.
+- **Edge case** — an owner whose pet has no tasks gets an empty daily plan
+  instead of a crash.
+
+### Successful test run
 
 ```
 ============================= test session starts =============================
-platform win32 -- Python 3.14.5, pytest-9.0.3, pluggy-1.6.0
-collected 7 items
+platform win32 -- Python 3.14.5, pytest-9.0.3, pluggy-1.6.0 -- C:\Users\onlyj\AppData\Local\Python\pythoncore-3.14-64\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\onlyj\Documents\Engineering Stuff\Code Path\ai110-module2show-pawpal-starter
+plugins: anyio-4.13.0
+collecting ... collected 11 items
 
-test\test_pawpal.py .......                                              [100%]
+tests/test_pawpal.py::test_mark_completed_changes_status PASSED          [  9%]
+tests/test_pawpal.py::test_adding_task_increases_pet_task_count PASSED   [ 18%]
+tests/test_pawpal.py::test_sort_by_time_orders_chronologically PASSED    [ 27%]
+tests/test_pawpal.py::test_sort_by_time_pushes_untimed_tasks_to_end PASSED [ 36%]
+tests/test_pawpal.py::test_completing_daily_task_creates_next_day_task PASSED [ 45%]
+tests/test_pawpal.py::test_weekly_task_advances_seven_days PASSED        [ 54%]
+tests/test_pawpal.py::test_completing_one_off_task_creates_no_follow_up PASSED [ 63%]
+tests/test_pawpal.py::test_detect_conflicts_flags_two_tasks_at_same_time PASSED [ 72%]
+tests/test_pawpal.py::test_detect_conflicts_clean_schedule_returns_empty PASSED [ 81%]
+tests/test_pawpal.py::test_detect_conflicts_ignores_untimed_tasks PASSED [ 90%]
+tests/test_pawpal.py::test_daily_plan_for_owner_with_no_tasks_is_empty PASSED [100%]
 
-============================== 7 passed in 0.07s ==============================
+============================= 11 passed in 0.05s ==============================
 ```
+
+### Confidence Level: ★★★★☆ (4/5)
+
+All 11 tests pass and cover every core scheduling behavior — sorting,
+recurrence, filtering, and conflict detection — including edge cases like
+untimed tasks, one-off completion, and empty pets. I'm holding back the fifth
+star because a couple of known gaps remain untested: `generate_daily_plan`
+places untimed tasks at the *front* (opposite of `sort_by_time`), and conflict
+detection only catches exact-time collisions, not overlapping durations. The
+logic is reliable for the behaviors verified; the missing star reflects
+coverage breadth, not observed defects.
 
 ## 📐 Smarter Scheduling
 
 These are the algorithmic features added on top of the base logic layer. Each
 method lives in `pawpal_system.py` and is exercised by `main.py` and the tests
-in `test/test_pawpal.py`.
+in `tests/test_pawpal.py`.
 
 | Feature | Method | Notes |
 |---------|--------|-------|
