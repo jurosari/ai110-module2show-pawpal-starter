@@ -49,8 +49,11 @@ I asked my AI coding assistant to review the `pawpal_system.py` skeleton for mis
 
 **b. Tradeoffs**
 
-- Describe one tradeoff your scheduler makes.
-- Why is that tradeoff reasonable for this scenario?
+- **The tradeoff: `detect_conflicts` flags only exact start-time matches, not overlapping durations.** It buckets tasks by their `"HH:MM"` slot and warns when a slot holds more than one task. So an 08:00 walk lasting 30 minutes and an 08:15 feeding are *not* flagged, even though they physically overlap — because their start strings differ. A true overlap check would need each task's end time (start + `duration_minutes`) and an interval sweep.
+
+- **Why it's reasonable here.** PawPal+ places tasks into a small set of discrete, owner-defined timeslots (e.g. 08:00 / 12:00 / 18:00), so in practice conflicts show up as two tasks landing in the *same* slot — exactly what the exact-match check catches. The lightweight version is O(n) with a single dict, returns plain warning strings (never raises), and is easy for a human to read and trust. Full interval-overlap detection adds an `end_time()` concept and time-arithmetic that isn't justified until tasks can be scheduled at arbitrary minutes rather than fixed slots. I noted it as a known limitation so the upgrade path (`Task.end_time()` + a sorted sweep) is explicit rather than forgotten.
+
+- **Aside — a readability-vs-idiom call I made while writing it.** I asked my AI assistant how to simplify the bucketing loop. Its more "Pythonic" suggestion used `itertools.groupby` (sort tasks by time, then group). I kept my explicit `dict.setdefault` loop instead: `groupby` requires the input to be pre-sorted and silently returns wrong groups if it isn't — a subtle trap — whereas the plain dict loop reads top-to-bottom with no hidden precondition. Here I judged the clearer, harder-to-misuse version worth more than the idiomatic one-liner.
 
 ---
 

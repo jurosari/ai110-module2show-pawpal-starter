@@ -45,18 +45,41 @@ pip install -r requirements.txt
 ## 🖥️ Sample Output
 
 Terminal output from running the logic-layer testing ground (`python main.py`).
-It builds an owner with two pets and four tasks, then prints the generated
-daily plan (tasks ordered by priority, highest first):
+It builds an owner with two pets and four tasks (added out of time order, with
+one already completed), then demonstrates each Smarter Scheduling feature:
+time sorting, filtering by status/pet, conflict detection, and recurrence.
 
 ```
-=== Today's Schedule for Alex ===
+=== All tasks for Alex, sorted by time ===
 
-  12:00  Medication for Luna (5 min) [priority: 9]
   08:00  Morning walk for Rex (30 min) [priority: 5]
-  18:00  Feeding for Rex (10 min) [priority: 4]
+  12:00  Medication for Luna (5 min) [done]
+  18:00  Evening feeding for Rex (10 min) [priority: 4]
   18:00  Play / enrichment for Luna (15 min) [priority: 2]
 
-4 task(s) planned across 2 pets.
+=== Pending tasks only (completed hidden), sorted by time ===
+
+  08:00  Morning walk for Rex (30 min) [priority: 5]
+  18:00  Evening feeding for Rex (10 min) [priority: 4]
+  18:00  Play / enrichment for Luna (15 min) [priority: 2]
+
+=== Luna's tasks, sorted by time ===
+
+  12:00  Medication for Luna (5 min) [done]
+  18:00  Play / enrichment for Luna (15 min) [priority: 2]
+
+3 pending task(s) across 2 pets (4 total).
+
+=== Checking for scheduling conflicts ===
+
+  [!] Conflict at 18:00: Evening feeding (Rex), Play / enrichment (Luna)
+
+=== Completing Rex's daily 'Morning walk' (due 2026-06-30) ===
+
+  Marked 'Morning walk' complete: True
+  Auto-created next occurrence: due 2026-07-01 at 08:00 (id t1@2026-07-01)
+
+  Rex now has 3 task(s); 2 pending.
 ```
 
 ## 🧪 Testing PawPal+
@@ -72,19 +95,61 @@ pytest --cov
 Sample test output:
 
 ```
-# Paste your pytest output here
+============================= test session starts =============================
+platform win32 -- Python 3.14.5, pytest-9.0.3, pluggy-1.6.0
+collected 7 items
+
+test\test_pawpal.py .......                                              [100%]
+
+============================== 7 passed in 0.07s ==============================
 ```
 
 ## 📐 Smarter Scheduling
 
-> Fill in once you've implemented scheduling logic.
+These are the algorithmic features added on top of the base logic layer. Each
+method lives in `pawpal_system.py` and is exercised by `main.py` and the tests
+in `test/test_pawpal.py`.
 
-| Feature | Method(s) | Notes |
-|---------|-----------|-------|
-| Task sorting | | e.g., by priority, duration |
-| Filtering | | e.g., skip tasks if time runs out |
-| Conflict handling | | e.g., overlapping time slots |
-| Recurring tasks | | e.g., daily vs. weekly |
+| Feature | Method | Notes |
+|---------|--------|-------|
+| Sorting by time | `Schedule.sort_by_time(tasks)` | Chronological order via `sorted()` + lambda key |
+| Filtering | `Schedule.filter_tasks(tasks, completed=..., pet_id=...)` | By completion status and/or pet |
+| Conflict detection | `Schedule.detect_conflicts(tasks, pet_names=...)` | Warns on tasks sharing a time slot |
+| Recurring tasks | `Pet.complete_task(task_id)` + `Task.next_occurrence()` | Auto-spawns the next daily/weekly occurrence |
+
+### Sorting behavior — `Schedule.sort_by_time()`
+
+Returns a new list of tasks ordered chronologically. Because `scheduled_time`
+is a zero-padded 24-hour `"HH:MM"` string, plain string comparison already
+matches clock order, so the `sorted()` key simply returns `t.scheduled_time`.
+Untimed tasks (`""`) are pushed to the end with a `"99:99"` sentinel instead of
+floating to the front.
+
+### Filtering behavior — `Schedule.filter_tasks()`
+
+Filters a task list by **completion status** (`completed=True/False`) and/or
+**pet** (`pet_id=...`). Both filters are optional and composable: pass one to
+narrow on it, both to narrow on both, or neither to get everything back.
+
+### Conflict detection — `Schedule.detect_conflicts()`
+
+Lightweight, exact-slot strategy: buckets tasks by their `"HH:MM"` time and
+returns a warning string for any slot holding more than one task — whether the
+tasks belong to the same pet or different pets. It never raises; a clean
+schedule returns an empty list. Pass an optional `{pet_id: name}` map for
+friendly names in the message (e.g. `[!] Conflict at 18:00: Evening feeding
+(Rex), Play / enrichment (Luna)`). See `reflection.md` §2b for the
+exact-match-vs-overlapping-durations tradeoff.
+
+### Recurring task logic — `Pet.complete_task()` + `Task.next_occurrence()`
+
+A `Task` carries a `frequency` (`"once"` / `"daily"` / `"weekly"`) and a
+`due_date`. When `Pet.complete_task()` marks a recurring task done, it calls
+`Task.next_occurrence()`, which uses `datetime.timedelta` to advance the due
+date (+1 day for daily, +7 for weekly, rolling over month/year boundaries) and
+returns a fresh, uncompleted copy. That copy is appended to the pet's task
+list, so completing today's walk automatically queues tomorrow's. One-off
+tasks return `None` and nothing is queued.
 
 ## 📸 Demo Walkthrough
 

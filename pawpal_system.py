@@ -10,6 +10,14 @@ Class structure follows diagrams/uml.mmd.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, timedelta
+
+# How far each recurrence frequency advances the due date. "once" (or any
+# value not listed here) means the task does not repeat.
+FREQUENCY_DELTAS: dict[str, timedelta] = {
+    "daily": timedelta(days=1),
+    "weekly": timedelta(weeks=1),  # weeks=1 == days=7, but reads clearer
+}
 
 
 @dataclass
@@ -23,6 +31,40 @@ class Task:
     duration_minutes: int = 0
     completed: bool = False
     priority: int = 0
+    frequency: str = "once"      # "once" | "daily" | "weekly"
+    due_date: str = ""           # ISO "YYYY-MM-DD"; "" means undated
+
+    def is_recurring(self) -> bool:
+        """True if this task repeats (daily/weekly), False for one-offs."""
+        return self.frequency in FREQUENCY_DELTAS
+
+    def next_occurrence(self) -> "Task | None":
+        """Return a fresh, uncompleted copy scheduled for the next date.
+
+        For a "daily" task the new due date is this task's due date + 1 day;
+        for "weekly" it is + 7 days. timedelta does this arithmetic safely,
+        rolling over month/year boundaries for us. If the task has no due
+        date yet, we base the next occurrence on today. One-off tasks return
+        None (nothing to repeat).
+        """
+        delta = FREQUENCY_DELTAS.get(self.frequency)
+        if delta is None:
+            return None
+
+        base = date.fromisoformat(self.due_date) if self.due_date else date.today()
+        next_date = (base + delta).isoformat()
+
+        return Task(
+            id=f"{self.id}@{next_date}",
+            pet_id=self.pet_id,
+            type=self.type,
+            scheduled_time=self.scheduled_time,
+            duration_minutes=self.duration_minutes,
+            completed=False,
+            priority=self.priority,
+            frequency=self.frequency,
+            due_date=next_date,
+        )
 
     def schedule(self, time: str) -> None:
         """Assign a scheduled time to this task."""
@@ -63,6 +105,22 @@ class Pet:
     def get_pending_tasks(self) -> list[Task]:
         """Return this pet's not-yet-completed tasks."""
         return [t for t in self.tasks if not t.completed]
+
+    def complete_task(self, task_id: str) -> Task | None:
+        """Mark a task complete and, if it recurs, queue its next occurrence.
+
+        Marking a "daily"/"weekly" task done spawns a fresh, uncompleted copy
+        for the next date and appends it to this pet's task list. Returns the
+        newly created follow-up task, or None for one-off tasks / unknown ids.
+        """
+        for task in self.tasks:
+            if task.id == task_id:
+                task.mark_completed()
+                follow_up = task.next_occurrence()
+                if follow_up is not None:
+                    self.tasks.append(follow_up)
+                return follow_up
+        return None
 
     def update_info(self, info: dict) -> None:
         """Update this pet's attributes from a dict of fields."""
@@ -157,6 +215,70 @@ class Schedule:
             if not self.slots.get(time):
                 return time
         return ""
+
+    def sort_by_time(self, tasks: list[Task]) -> list[Task]:
+        """Return a new list of tasks ordered chronologically by their time.
+
+        Uses sorted() with a lambda "key". Because scheduled_time is a
+        zero-padded 24-hour "HH:MM" string ("08:00", "12:00", "18:00"),
+        plain string comparison already matches clock order — so the key
+        just returns t.scheduled_time. Untimed tasks (empty string) are
+        pushed to the end with a "99:99" sentinel instead of the front.
+        """
+        return sorted(tasks, key=lambda t: t.scheduled_time or "99:99")
+
+    def filter_tasks(
+        self,
+        tasks: list[Task],
+        *,
+        completed: bool | None = None,
+        pet_id: str | None = None,
+    ) -> list[Task]:
+        """Return the tasks matching the given completion status and/or pet.
+
+        Each filter is optional. Passing only ``completed=False`` returns
+        pending tasks; passing only ``pet_id`` returns one pet's tasks;
+        passing both narrows on both. With no filters, returns all tasks.
+        """
+        result = tasks
+        if completed is not None:
+            result = [t for t in result if t.completed == completed]
+        if pet_id is not None:
+            result = [t for t in result if t.pet_id == pet_id]
+        return result
+
+    def detect_conflicts(
+        self,
+        tasks: list[Task],
+        pet_names: dict[str, str] | None = None,
+    ) -> list[str]:
+        """Return warning strings for tasks that share the same time slot.
+
+        Lightweight strategy: bucket tasks by their "HH:MM" scheduled_time
+        and flag any slot holding more than one task — whether they belong to
+        the same pet or different pets. Untimed tasks ("") are ignored. This
+        never raises; a clean schedule simply returns an empty list, so the
+        caller can warn without the program crashing.
+
+        Pass an optional {pet_id: name} map to get friendly names in the
+        message; otherwise the raw pet_id is shown.
+        """
+        pet_names = pet_names or {}
+        by_time: dict[str, list[Task]] = {}
+        for task in tasks:
+            if task.scheduled_time:  # skip undated/untimed tasks
+                by_time.setdefault(task.scheduled_time, []).append(task)
+
+        warnings: list[str] = []
+        for time in sorted(by_time):
+            clashing = by_time[time]
+            if len(clashing) > 1:
+                labels = ", ".join(
+                    f"{t.type} ({pet_names.get(t.pet_id, t.pet_id)})"
+                    for t in clashing
+                )
+                warnings.append(f"[!] Conflict at {time}: {labels}")
+        return warnings
 
     def generate_daily_plan(self, owner: Owner, date: str) -> list[Task]:
         """Build an ordered task plan for the owner on the given date.
