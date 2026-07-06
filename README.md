@@ -22,6 +22,25 @@ Your final app should:
 - Display the plan clearly (and ideally explain the reasoning)
 - Include tests for the most important scheduling behaviors
 
+## ✨ Features
+
+PawPal+ pairs an interactive Streamlit UI with a tested Python logic layer
+(`pawpal_system.py`). The scheduling algorithms it implements:
+
+- **Sorting by time** — orders tasks chronologically by their `"HH:MM"` slot;
+  untimed tasks sort to the *end*, not the front (`Schedule.sort_by_time`).
+- **Filtering** — narrows a task list by completion status and/or pet, and the
+  two filters compose (`Schedule.filter_tasks`).
+- **Conflict warnings** — flags any two tasks booked in the same time slot,
+  naming the pets involved so the owner knows what to move
+  (`Schedule.detect_conflicts`).
+- **Daily / weekly recurrence** — completing a recurring task auto-queues its
+  next occurrence (+1 day or +7 days), rolling across month and year boundaries
+  (`Pet.complete_task` + `Task.next_occurrence`).
+- **Priority-ordered daily plan** — builds the day's plan sorted by priority
+  (highest first), then by time (`Owner.get_daily_plan` →
+  `Schedule.generate_daily_plan`).
+
 ## Getting started
 
 ### Setup
@@ -41,46 +60,6 @@ pip install -r requirements.txt
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
-
-## 🖥️ Sample Output
-
-Terminal output from running the logic-layer testing ground (`python main.py`).
-It builds an owner with two pets and four tasks (added out of time order, with
-one already completed), then demonstrates each Smarter Scheduling feature:
-time sorting, filtering by status/pet, conflict detection, and recurrence.
-
-```
-=== All tasks for Alex, sorted by time ===
-
-  08:00  Morning walk for Rex (30 min) [priority: 5]
-  12:00  Medication for Luna (5 min) [done]
-  18:00  Evening feeding for Rex (10 min) [priority: 4]
-  18:00  Play / enrichment for Luna (15 min) [priority: 2]
-
-=== Pending tasks only (completed hidden), sorted by time ===
-
-  08:00  Morning walk for Rex (30 min) [priority: 5]
-  18:00  Evening feeding for Rex (10 min) [priority: 4]
-  18:00  Play / enrichment for Luna (15 min) [priority: 2]
-
-=== Luna's tasks, sorted by time ===
-
-  12:00  Medication for Luna (5 min) [done]
-  18:00  Play / enrichment for Luna (15 min) [priority: 2]
-
-3 pending task(s) across 2 pets (4 total).
-
-=== Checking for scheduling conflicts ===
-
-  [!] Conflict at 18:00: Evening feeding (Rex), Play / enrichment (Luna)
-
-=== Completing Rex's daily 'Morning walk' (due 2026-06-30) ===
-
-  Marked 'Morning walk' complete: True
-  Auto-created next occurrence: due 2026-07-01 at 08:00 (id t1@2026-07-01)
-
-  Rex now has 3 task(s); 2 pending.
-```
 
 ## 🧪 Testing PawPal+
 
@@ -189,14 +168,90 @@ returns a fresh, uncompleted copy. That copy is appended to the pet's task
 list, so completing today's walk automatically queues tomorrow's. One-off
 tasks return `None` and nothing is queued.
 
-## 📸 Demo Walkthrough
+## 🎬 Demo Walkthrough
 
-Describe your app in numbered steps so a reader can follow along without watching a video:
+PawPal+ has two faces that share the same logic layer: an interactive
+**Streamlit app** (`app.py`) for everyday use, and a **command-line demo**
+(`main.py`) that exercises the scheduling algorithms in one run.
 
-1. <!-- Describe this step -->
-2. <!-- Describe this step -->
-3. <!-- Describe this step -->
-4. <!-- Describe this step -->
-5. <!-- Add more steps as needed -->
+### The Streamlit app — `streamlit run app.py`
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or link to a demo video here -->
+The UI is organized top-to-bottom into sections. Every action calls a real
+method on the persisted `Owner` / `Pet` / `Schedule` objects (state survives
+Streamlit's reruns via `st.session_state`):
+
+- **Owner** — set the owner's name.
+- **Add a Pet** — submit a name, species, and age → `Owner.add_pet()`.
+- **Schedule a Task** — pick a pet, then enter a task title, duration, priority,
+  and time slot → `Pet.add_task()` and (if timed) `Schedule.add_task()`.
+- **Task list** — a per-pet table with a **Show** filter (All / Pending /
+  Completed) and a **Sort by time** toggle, driven by `Schedule.filter_tasks()`
+  and `Schedule.sort_by_time()`.
+- **Build Schedule** — generates the day's priority-ordered plan
+  (`Owner.get_daily_plan()`) and surfaces any **conflict warnings**
+  (`Schedule.detect_conflicts()`) as a yellow `st.warning` callout that names the
+  clashing tasks and pets.
+
+### Example workflow
+
+1. Enter the owner name (e.g. *Alex*).
+2. **Add a pet** — *Rex, dog, age 3*.
+3. **Schedule a task** — *Morning walk*, 30 min, high priority, `08:00`.
+4. Add a second pet (*Luna*) and give her a task at `18:00` — the same slot as
+   one of Rex's tasks.
+5. Use the **Show** / **Sort by time** controls to review each pet's tasks in
+   chronological order and hide completed ones.
+6. Click **Build Schedule** → the plan appears priority-first, and a **conflict
+   warning** flags the `18:00` double-booking so you know to reschedule one.
+
+### Key scheduler behaviors shown
+
+- **Sorting** — tasks entered out of order (evening before morning) come back
+  `08:00 → 18:00`.
+- **Filtering** — hiding completed tasks, and viewing a single pet's list.
+- **Conflict warnings** — two tasks at `18:00` produce one human-readable
+  warning naming both pets.
+- **Recurrence** — completing the daily *Morning walk* auto-creates tomorrow's
+  copy.
+
+### Sample CLI output — `python main.py`
+
+`main.py` builds an owner (*Alex*) with two pets and four tasks — added out of
+time order, one already completed, two deliberately at the same `18:00` slot —
+then demonstrates each behavior in turn:
+
+```
+=== All tasks for Alex, sorted by time ===
+
+  08:00  Morning walk for Rex (30 min) [priority: 5]
+  12:00  Medication for Luna (5 min) [done]
+  18:00  Evening feeding for Rex (10 min) [priority: 4]
+  18:00  Play / enrichment for Luna (15 min) [priority: 2]
+
+=== Pending tasks only (completed hidden), sorted by time ===
+
+  08:00  Morning walk for Rex (30 min) [priority: 5]
+  18:00  Evening feeding for Rex (10 min) [priority: 4]
+  18:00  Play / enrichment for Luna (15 min) [priority: 2]
+
+=== Luna's tasks, sorted by time ===
+
+  12:00  Medication for Luna (5 min) [done]
+  18:00  Play / enrichment for Luna (15 min) [priority: 2]
+
+3 pending task(s) across 2 pets (4 total).
+
+=== Checking for scheduling conflicts ===
+
+  [!] Conflict at 18:00: Evening feeding (Rex), Play / enrichment (Luna)
+
+=== Completing Rex's daily 'Morning walk' (due 2026-06-30) ===
+
+  Marked 'Morning walk' complete: True
+  Auto-created next occurrence: due 2026-07-01 at 08:00 (id t1@2026-07-01)
+
+  Rex now has 3 task(s); 2 pending.
+```
+
+*Optional:* add screenshots of the Streamlit UI here for human reviewers — the
+text walkthrough and CLI output above are the gradable record.

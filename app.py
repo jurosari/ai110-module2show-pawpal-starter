@@ -143,18 +143,42 @@ if submitted_task:
 
 if pet.tasks:
     st.write(f"Tasks for {pet.name}:")
-    st.table(
-        [
-            {
-                "task": t.type,
-                "time": t.scheduled_time or "—",
-                "duration (min)": t.duration_minutes,
-                "priority": int_to_priority.get(t.priority, t.priority),
-                "done": t.completed,
-            }
-            for t in pet.tasks
-        ]
-    )
+
+    # --- Filter + sort controls (Phase 3 features, now driven from the UI) ---
+    # These map directly onto Schedule.filter_tasks() and Schedule.sort_by_time().
+    fcol1, fcol2 = st.columns(2)
+    with fcol1:
+        status_filter = st.radio(
+            "Show",
+            options=["All", "Pending", "Completed"],
+            horizontal=True,
+            key="pet_status_filter",
+        )
+    with fcol2:
+        sort_by_time = st.checkbox("Sort by time", value=True, key="pet_sort_time")
+
+    # Translate the radio choice into filter_tasks()' completed= argument:
+    # None = no filter, False = pending only, True = completed only.
+    completed_arg = {"All": None, "Pending": False, "Completed": True}[status_filter]
+    shown = owner.schedule.filter_tasks(pet.tasks, completed=completed_arg)
+    if sort_by_time:
+        shown = owner.schedule.sort_by_time(shown)
+
+    if shown:
+        st.table(
+            [
+                {
+                    "task": t.type,
+                    "time": t.scheduled_time or "—",
+                    "duration (min)": t.duration_minutes,
+                    "priority": int_to_priority.get(t.priority, t.priority),
+                    "done": "✅" if t.completed else "⬜",
+                }
+                for t in shown
+            ]
+        )
+    else:
+        st.info(f"No {status_filter.lower()} tasks for {pet.name}.")
 else:
     st.info(f"{pet.name} has no tasks yet.")
 
@@ -169,6 +193,26 @@ if st.button("Generate schedule"):
         st.info("No pending tasks to plan. Schedule a task above first.")
     else:
         st.success(f"Built a plan with {len(plan)} task(s) for {owner.name}.")
+
+        # --- Conflict detection --------------------------------------------
+        # Schedule.detect_conflicts() flags any tasks booked at the same time
+        # slot. For a pet owner, a clash means they'd need to be in two places
+        # at once — so we surface it prominently as an actionable st.warning,
+        # naming the pet + task and pointing them at the fix (reschedule one).
+        pet_names = {p.id: p.name for p in owner.pets}
+        conflicts = owner.schedule.detect_conflicts(plan, pet_names)
+        if conflicts:
+            st.warning(
+                f"⚠️ {len(conflicts)} scheduling conflict(s) found — "
+                "these tasks overlap. Consider moving one to another time slot."
+            )
+            for warning in conflicts:
+                # Strip the "[!] " prefix from the backend's plain-text label
+                # so the Streamlit callout reads cleanly.
+                st.markdown(f"- {warning.removeprefix('[!] ')}")
+        else:
+            st.success("✅ No scheduling conflicts — every task has its own time slot.")
+
         st.write("Ordered plan (highest priority first, then by time):")
         st.table(
             [
